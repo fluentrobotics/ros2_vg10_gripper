@@ -2,6 +2,14 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <link name="vg10_quick_changer">
+    <!-- Mass measured with screws and alignment pin. CoM and inertia from the
+    STEP model assuming uniform density. -->
+    <inertial>
+      <origin xyz="-0.01196 0.00006 0.00468" rpy="0 0 0" />
+      <mass value="0.090" />
+      <inertia ixx="2.455e-05" ixy="-1.727e-06" ixz="1.393e-06"
+        iyy="7.709e-05" iyz="-2.52e-07" izz="9.828e-05" />
+    </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
       <geometry>
@@ -24,6 +32,16 @@
   </link>
 
   <link name="vg10">
+    <!-- Mass measured with four larger suction cups at the outer corners. The
+    CoM is set so that the assembled gripper and quick changer match their CoM
+    measured by tipping over an edge: 64.5 +/- 2 mm from the flange along the
+    tool axis (lateral offset assumed zero from symmetry). Inertia about the CoM
+    from the STEP model assuming uniform density. -->
+    <inertial>
+      <origin xyz="0 0 0.06774" rpy="0 0 0" />
+      <mass value="1.641" />
+      <inertia ixx="3.18e-03" ixy="0" ixz="0" iyy="3.18e-03" iyz="0" izz="4.20e-03" />
+    </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
       <geometry>
