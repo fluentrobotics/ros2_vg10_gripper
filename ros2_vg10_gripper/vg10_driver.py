@@ -1,109 +1,68 @@
-# A significant amount of this file is originally from
-# https://github.com/RyanPaulMcKenna/onRobot/blob/9961464d/onRobot/onRobot/gripper.py
-# under the MIT License.
+"""XML-RPC access to an OnRobot VG10 through the URCap on the UR control box."""
 
-from io import BytesIO
-from typing import Literal
+from http.client import HTTPConnection
+from typing import Any, cast
+from xmlrpc.client import ServerProxy, Transport
 
-import pycurl
+
+class _TimeoutTransport(Transport):
+    """XML-RPC transport with socket timeouts and no automatic retries."""
+
+    def __init__(self, timeout: float) -> None:
+        super().__init__()
+        self.timeout = timeout
+
+    def make_connection(self, host: str | tuple[str, dict[str, str]]) -> HTTPConnection:
+        connection = super().make_connection(host)
+        connection.timeout = self.timeout
+        return connection
+
+    def request(
+        self,
+        host: str | tuple[str, dict[str, str]],
+        handler: str,
+        request_body: Any,
+        verbose: bool = False,
+    ) -> tuple[Any, ...]:
+        return self.single_request(host, handler, request_body, verbose)
 
 
 class VG10:
-    def __init__(self, robot_ip: str, vg_id: int) -> None:
-        self.robot_ip = robot_ip
+    """XML-RPC client for a VG10 device.
+
+    Each instance supports one call at a time. Requests are not retried
+    automatically, and transport and XML-RPC errors propagate to the caller.
+    Each command opens a fresh connection. Command methods return the
+    controller's integer result without waiting for vacuum to change.
+    """
+
+    def __init__(self, robot_ip: str, vg_id: int, *, timeout: float = 2.0) -> None:
+        """Create a client for ``vg_id`` on the UR control box at ``robot_ip``.
+
+        ``timeout`` bounds socket operations in seconds.
+        """
         self.vg_id = vg_id
+        self._transport = _TimeoutTransport(timeout)
+        self._server = ServerProxy(
+            f"http://{robot_ip}:41414/", transport=self._transport
+        )
 
-    def vg10_release(self, channelA: Literal[0, 1], channelB: Literal[0, 1]) -> None:
-        xml_request = f"""<?xml version="1.0"?>
-        <methodCall>
-        <methodName>vg10_release</methodName>
-            <params>
-                <param>
-                <value><int>{self.vg_id}</int></value>
-                </param>
-                <param>
-                <value><boolean>{channelA}</boolean></value>
-                </param>
-                <param>
-                <value><boolean>{channelB}</boolean></value>
-                </param>
-            </params>
-        </methodCall>"""
+    def vg10_grip(self, channel: int, vacuum_percent: float) -> int:
+        """Command vacuum at ``vacuum_percent``; channel 0 is A, 1 is B, and 2 is both."""
+        self._transport.close()
+        return cast(
+            int, self._server.vg10_grip(self.vg_id, channel, float(vacuum_percent))
+        )
 
-        headers = ["Content-Type: application/x-www-form-urlencoded"]
+    def vg10_release(self, channel_a: bool, channel_b: bool) -> int:
+        """Release the selected channels."""
+        self._transport.close()
+        return cast(int, self._server.vg10_release(self.vg_id, channel_a, channel_b))
 
-        # headers = ["User-Agent: Python-PycURL", "Accept: application/json"]
-        data = xml_request.replace("\r\n", "").encode()
-        # Create a new cURL object
-        curl = pycurl.Curl()
+    def vg10_get_vacuum(self) -> dict[str, float]:
+        """Read vacuum percentages as ``a_vacuum`` and ``b_vacuum``."""
+        return cast(dict[str, float], self._server.vg10_get_vacuum(self.vg_id))
 
-        # Set the URL to fetch
-        curl.setopt(curl.URL, f"http://{self.robot_ip}:41414")
-        curl.setopt(curl.HTTPHEADER, headers)
-        curl.setopt(curl.POSTFIELDS, data)
-        # Create a BytesIO object to store the response
-        buffer = BytesIO()
-        curl.setopt(curl.WRITEDATA, buffer)
-
-        # Perform the request
-        curl.perform()
-
-        # Get the response body
-        response = buffer.getvalue()
-
-        # Print the response
-        print(response.decode("utf-8"))
-
-        # Close the cURL object
-        curl.close()
-
-    def vg10_grip(self, channel: int, vacuum_percent: float) -> None:
-        """
-        Args:
-            channel: 0 (A), 1 (B), 2 (A and B)
-            vacuum_percent: softgrip => 30 = 30%, firm grip => 60 = 60%
-        """
-
-        xml_request = f"""<?xml version="1.0"?>
-        <methodCall>
-        <methodName>vg10_grip</methodName>
-            <params>
-                <param>
-                    <value><int>{self.vg_id}</int></value>
-                </param>
-                <param>
-                    <value><int>{channel}</int></value>
-                </param>
-                <param>
-                    <value><double>{vacuum_percent}</double></value>
-                </param>
-            </params>
-        </methodCall>
-        """
-
-        headers = ["Content-Type: application/x-www-form-urlencoded"]
-
-        # headers = ["User-Agent: Python-PycURL", "Accept: application/json"]
-        data = xml_request.replace("\r\n", "").encode()
-        # Create a new cURL object
-        curl = pycurl.Curl()
-
-        # Set the URL to fetch
-        curl.setopt(curl.URL, f"http://{self.robot_ip}:41414")
-        curl.setopt(curl.HTTPHEADER, headers)
-        curl.setopt(curl.POSTFIELDS, data)
-        # Create a BytesIO object to store the response
-        buffer = BytesIO()
-        curl.setopt(curl.WRITEDATA, buffer)
-
-        # Perform the request
-        curl.perform()
-
-        # Get the response body
-        response = buffer.getvalue()
-
-        # Print the response
-        print(response.decode("utf-8"))
-
-        # Close the cURL object
-        curl.close()
+    def close(self) -> None:
+        """Close the HTTP connection."""
+        self._transport.close()
