@@ -100,9 +100,7 @@ class VG10Node(Node):
         else:
             response.success = result == 0
             response.message = (
-                f"{action} command accepted"
-                if response.success
-                else f"{action} command returned {result}"
+                "" if response.success else f"{action} command returned {result}"
             )
         self.command_event_publisher.publish(
             CommandEvent(
