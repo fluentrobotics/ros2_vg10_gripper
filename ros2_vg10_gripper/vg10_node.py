@@ -116,7 +116,8 @@ class VG10Node(Node):
     def publish_state(self) -> None:
         """Read both vacuum levels and publish them with the response receipt time.
 
-        Read failures are logged and publication is skipped.
+        Read failures and responses without both vacuum levels are logged and
+        publication is skipped.
         """
         try:
             values = self._state_driver.vg10_get_vacuum()
@@ -125,11 +126,19 @@ class VG10Node(Node):
                 f"Vacuum read failed: {error}", throttle_duration_sec=5.0
             )
             return
+        try:
+            a_vacuum = values["a_vacuum"]
+            b_vacuum = values["b_vacuum"]
+        except (KeyError, TypeError):
+            self.get_logger().error(
+                f"Unexpected vacuum response: {values!r}", throttle_duration_sec=5.0
+            )
+            return
         self.state_publisher.publish(
             VacuumState(
                 stamp=self.get_clock().now().to_msg(),
-                a_vacuum=values["a_vacuum"],
-                b_vacuum=values["b_vacuum"],
+                a_vacuum=a_vacuum,
+                b_vacuum=b_vacuum,
             )
         )
 
